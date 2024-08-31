@@ -1,20 +1,16 @@
 # Microsserviços com gRPC
 
-Este guia fornece uma visão detalhada sobre a implementação e compreensão de um sistema de microsserviços de alto desempenho e segurança usando gRPC. Vamos explorar como o gRPC facilita a comunicação entre microsserviços e como você pode aplicar autenticação e autorização de forma granular.
+Este guia oferece uma visão detalhada sobre a implementação e compreensão de um sistema de microsserviços de alto desempenho e segurança usando gRPC. Vamos explorar como o gRPC facilita a comunicação entre microsserviços e como aplicar autenticação e autorização de forma granular.
 
 ## O que é gRPC?
 
-[gRPC](https://grpc.io/) é um framework de comunicação de alto desempenho desenvolvido pelo Google, baseado no protocolo HTTP/2 e no formato de serialização Protocol Buffers (protobuf). Ele permite a comunicação eficiente entre microsserviços e suporta múltiplas linguagens, incluindo Java, Python, Go, e mais. O gRPC é ideal para cenários de microsserviços devido à sua eficiência e suporte a chamadas síncronas e assíncronas.
-
-Ele se comunica através 
+[gRPC](https://grpc.io/) é um framework de comunicação de alto desempenho desenvolvido pelo Google. Ele utiliza HTTP/2 e Protocol Buffers (protobuf) para oferecer uma comunicação eficiente entre microsserviços. Suporta múltiplas linguagens e é ideal para cenários de microsserviços devido à sua eficiência e suporte a chamadas síncronas e assíncronas.
 
 ## Fluxo de Dados
 
-Abaixo está uma explicação detalhada do fluxo de dados em um sistema de microsserviços usando gRPC para comunicação entre serviços.
-
 ### 1. Requisição do Cliente
 
-1. **Cliente (Web ou Mobile)**: O cliente faz uma requisição HTTP REST para o serviço de pedidos. O token JWT é incluído no cabeçalho da requisição para autenticação.
+- **Cliente (Web ou Mobile)**: O cliente envia uma requisição HTTP REST para o serviço de pedidos. O token JWT é incluído no cabeçalho da requisição para autenticação.
 
    ```http
    POST /api/orders HTTP/1.1
@@ -30,7 +26,7 @@ Abaixo está uma explicação detalhada do fluxo de dados em um sistema de micro
 
 ### 2. Processamento no Serviço de Pedidos
 
-1. **Controller do Serviço de Pedidos**: O serviço de pedidos recebe a requisição HTTP REST e valida o JWT.
+- **Controller do Serviço de Pedidos**: Recebe a requisição HTTP REST e valida o JWT.
 
    ```java
    @RestController
@@ -42,13 +38,13 @@ Abaixo está uma explicação detalhada do fluxo de dados em um sistema de micro
    }
    ```
 
-2. **Camada de Serviço**: Após a validação, o controlador chama a camada de serviço que pode interagir com outros serviços, como o serviço de pagamento.
+- **Camada de Serviço**: Após a validação, a camada de serviço pode chamar outros serviços, como o serviço de pagamento, usando gRPC. 
 
-**Nota:** No gRPC, a comunicação é direcionada diretamente para o método na camada de serviço do microsserviço. Isso significa que, ao fazer uma chamada gRPC, você está invocando um método específico definido na interface do serviço gRPC.
+  **Nota:** A comunicação gRPC é direcionada diretamente para o método na camada de serviço do microsserviço, permitindo chamadas específicas conforme definido na interface do serviço gRPC.
 
 ### 3. Comunicação com o Serviço de Pagamento via gRPC
 
-1. **Chamada gRPC**: O serviço de pedidos usa gRPC para se comunicar com o serviço de pagamento, passando o JWT nos metadados da chamada gRPC.
+- **Chamada gRPC**: O serviço de pedidos utiliza gRPC para interagir com o serviço de pagamento. O JWT é passado nos metadados da chamada gRPC.
 
    ```java
    public class PaymentServiceClient {
@@ -68,7 +64,7 @@ Abaixo está uma explicação detalhada do fluxo de dados em um sistema de micro
    }
    ```
 
-2. **Interceptador no Servidor gRPC**: No lado do servidor, você pode usar um interceptador para validar o JWT recebido e decidir se a autenticação é necessária para o método.
+- **Interceptador no Servidor gRPC**: No lado do servidor, um interceptador pode validar o JWT e aplicar regras específicas de autenticação para cada método chamado.
 
    ```java
    public class AuthInterceptor implements ServerInterceptor {
@@ -101,7 +97,7 @@ Abaixo está uma explicação detalhada do fluxo de dados em um sistema de micro
 
 ### 4. Resposta ao Cliente
 
-1. **Processamento e Resposta**: Após a validação no serviço de pagamento, o resultado é retornado para o serviço de pedidos, que então envia a resposta final de volta ao cliente.
+- **Processamento e Resposta**: Após o processamento no serviço de pagamento, o resultado é retornado ao serviço de pedidos, que por sua vez envia a resposta final de volta ao cliente.
 
    ```java
    @Service
