@@ -13,7 +13,7 @@ Este guia oferece uma visão detalhada sobre a implementação e compreensão de
 - **Cliente (Web ou Mobile)**: O cliente envia uma requisição HTTP REST para o serviço de pedidos. O token JWT é incluído no cabeçalho da requisição para autenticação.
 
    ```http
-   POST /api/orders HTTP/1.1
+   POST /wsapi/orders HTTP/1.1
    Host: example.com
    Authorization: Bearer <token>
    Content-Type: application/json
@@ -33,7 +33,8 @@ Este guia oferece uma visão detalhada sobre a implementação e compreensão de
    public class OrderController {
       @PostMapping("/wsapi/orders") // wsapi -> web security api (segurança e validação do token abstraído pelo Spring Security)
       public ResponseEntity<?> createOrder(@RequestHeader("Authorization") String token, @RequestBody OrderRequest orderRequest) {
-          // Processar pedido e chamar o serviço de pagamento
+          // Validar parâmetros, e outros pontos desejados daí então chamar a camada de Service do microsserviço de pedido
+          // para processar o pedido e chamar o microsserviço de pagamento
       }
    }
    ```
@@ -46,54 +47,96 @@ Este guia oferece uma visão detalhada sobre a implementação e compreensão de
 
 - **Chamada gRPC**: O serviço de pedidos utiliza gRPC para interagir com o serviço de pagamento. O JWT é passado nos metadados da chamada gRPC.
 
-   ```java
-   public class PaymentServiceClient {
-      private final PaymentServiceGrpc.PaymentServiceBlockingStub blockingStub;
+#### Exemplo com Java e gRPC
 
-      public PaymentServiceClient(Channel channel) {
-         blockingStub = PaymentServiceGrpc.newBlockingStub(channel);
-      }
+**Dependências Maven**
 
-      public PaymentResponse processPayment(String token, PaymentRequest request) {
-         Metadata headers = new Metadata();
-         Metadata.Key<String> authorizationKey = Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
-         headers.put(authorizationKey, token);
+Adicione as seguintes dependências no `pom.xml`:
 
-         return blockingStub.withCallCredentials(MetadataUtils.newAttachHeadersInterceptor(headers)).processPayment(request);
-      }
-   }
-   ```
+```xml
+<dependency>
+    <groupId>io.grpc</groupId>
+    <artifactId>grpc-netty-shaded</artifactId>
+    <version>1.48.1</version>
+</dependency>
+<dependency>
+    <groupId>io.grpc</groupId>
+    <artifactId>grpc-protobuf</artifactId>
+    <version>1.48.1</version>
+</dependency>
+<dependency>
+    <groupId>io.grpc</groupId>
+    <artifactId>grpc-stub</artifactId>
+    <version>1.48.1</version>
+</dependency>
+```
+
+**Client gRPC**
+
+```java
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.stub.MetadataUtils;
+import io.grpc.Metadata;
+
+public class PaymentServiceClient {
+    private final PaymentServiceGrpc.PaymentServiceBlockingStub blockingStub;
+
+    public PaymentServiceClient(ManagedChannel channel) {
+        blockingStub = PaymentServiceGrpc.newBlockingStub(channel);
+    }
+
+    public PaymentResponse processPayment(String token, PaymentRequest request) {
+        Metadata headers = new Metadata();
+        Metadata.Key<String> authorizationKey = Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
+        headers.put(authorizationKey, token);
+
+        return blockingStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers))
+                           .processPayment(request);
+    }
+}
+```
 
 - **Interceptador no Servidor gRPC**: No lado do servidor, um interceptador pode validar o JWT e aplicar regras específicas de autenticação para cada método chamado.
 
-   ```java
-   public class AuthInterceptor implements ServerInterceptor {
-      @Override
-      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-         ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-         String methodName = call.getMethodDescriptor().getFullMethodName();
-         if (requiresAuthentication(methodName)) {
+**Nota:** É importante que o validateToken seja similar ou igual em todos os pontos de validação de token JWT para segurança.
+
+```java
+import io.grpc.*;
+
+public class AuthInterceptor implements ServerInterceptor {
+    private final String SECRET_KEY = "your_secret_key";
+
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        String methodName = call.getMethodDescriptor().getFullMethodName();
+        if (requiresAuthentication(methodName)) {
             String token = headers.get(Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER));
             if (token == null || !validateToken(token)) {
-               call.close(Status.UNAUTHENTICATED.withDescription("Invalid token"), new Metadata());
-               return new ServerCall.Listener<ReqT>() {};
+                call.close(Status.UNAUTHENTICATED.withDescription("Invalid token"), new Metadata());
+                return new ServerCall.Listener<ReqT>() {};
             }
-         }
-  
-         return next.startCall(call, headers);
-      }
+        }
+        return next.startCall(call, headers);
+    }
 
-      private boolean requiresAuthentication(String methodName) {
-         // Define quais métodos precisam de autenticação
-         return methodName.equals("/PaymentService/ProcessPayment");
-      }
+    private boolean requiresAuthentication(String methodName) {
+        return methodName.equals("/PaymentService/ProcessPayment");
+    }
 
-      private boolean validateToken(String token) {
-         // Implementar validação do JWT aqui
-         return token != null && token.startsWith("Bearer ");
-      }
-   }
-   ```
+    private boolean validateToken(String token) {
+        try {
+            Jwts.parser()
+                .setSigningKey(SECRET_KEY.getBytes())
+                .parseClaimsJws(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+}
+```
 
 ### 4. Resposta ao Cliente
 
